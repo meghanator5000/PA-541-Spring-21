@@ -1,0 +1,365 @@
+---
+title: "541_HW_3"
+author: "Meghan Mokate"
+date: "4/11/2021"
+output:
+  pdf_document:
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE, echo = TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Part 1
+
+```{r, include=FALSE}
+library(tidyverse)
+library(lmtest)
+library(car)
+library(fastDummies)
+
+cavax <- read_csv("cavax.csv")
+```
+
+## Question 1
+
+### 1a. In how many schools is the percentage of students exempt for medical reasons (med_exempt) greater than the percentage exempt for religious reasons (rel_exempt)? [2 pts] 
+
+518
+
+```{r}
+cavax_1a <- cavax %>%
+  filter(med_exempt > rel_exempt) 
+
+nrow(cavax_1a) # 518
+```
+
+### Of this set of schools, what percent are public schools? [2 pts]
+
+86.48649 %
+
+```{r}
+cavax_pub <- cavax_1a %>%
+  filter(type == "PUBLIC")
+
+nrow(cavax_pub) # 448
+
+nrow(cavax_pub) / nrow(cavax_1a) 
+```
+
+### 1b. Which county, when averaging across all the schools in that county, has the highest average percentage of exempt students (exempt)? Note, we are using the variable exempt here. [2 pts]
+
+Nevada with 24
+
+```{r}
+cavax_1b <- cavax %>%
+  group_by(county) %>%
+  summarise(avg_exempt = mean(exempt)) %>%
+  arrange(desc(avg_exempt))
+cavax_1b
+
+# Nevada with 24
+```
+
+### 1c. Create a bar chart that shows for private and public schools (type) the percent of students exempt from providing vaccination records (exempt). [2 pts]
+
+```{r, fig.width=8}
+# adjust output size here for the graph
+cavax_1c <- cavax %>%
+  group_by(type) %>%
+  summarise(avg_exempt = mean(exempt)) %>%
+  ggplot() +
+  geom_bar(mapping = aes(weight = avg_exempt,
+                         y = type)) +
+  labs(title = "Average Percent of Students Exempt from Providing Vaccination Records by School Type", 
+       x = "Average Percent of Students Exempt from Providing Vaccination Records", 
+       y = "School Type") 
+cavax_1c
+```
+
+## Question 2
+
+### Estimate a model predicting exempt (exempt) by district type (type) and enrollment (enrollment). [2 pts] 
+
+```{r}
+lm1 <- lm(data = cavax, exempt ~ type + enrollment)  
+summary(lm1)
+```
+
+### Treat exempt as a continuous variable (and thus you can use standard OLS). Interpret the intercept and the coefficients. [4 pts] 
+
+Intercept: For schools with a enrollment of zero and a district type of private, the predicted percent of students exempt from providing vaccination records is 6.288602. This value makes no sense given that schools can't have an enrollment of zero. It is simply the point at which the line crosses the y axis. The intercept is significant at the 0.001 level since the p-value is 2e-16.
+
+typePUBLIC - When the district type is public instead of private, the predicted percent of students exempt from providing vaccination records decreases by 0.860822. This variable is significant at the 0.01 level since the p-value is 0.00109.
+
+enrollment - For each additional unit increase in kindergarten enrollment, the predicted percent of students exempt from providing vaccination records decreases by 0.029606. This variable is significant at the 0.001 level since the p-value is 2e-16.
+
+### What is the predicted exempt percentage for a public school with 100 students in kindergarten? [2 pts] 
+
+2.46718
+
+```{r}
+6.288602 + -0.860822*1 + -0.029606*100
+```
+
+### What is the predicted exempt percentage for a private school with 80 students in kindergarten? [2pts]
+
+3.920122
+
+```{r}
+6.288602 + -0.860822*0 + -0.029606*80 # 3.920122
+```
+
+## Question 3
+
+### Test whether the assumption of homoskedasticy has been met. [2 pts]
+
+```{r}
+bptest(lm1)
+```
+### Discuss results. [2 pts] 
+
+I use the BP test function in the 'lmtest' package of R to test if the assumption of homoskedasticy has been met. Knowing that the null hypothesis of the Breusch-Pagan test is that the model is homoskedastic, I see that my p-value is 2.2e-16, meaning that the null is rejected at the .001 level. Since we reject the null, we believe that there is evidence to suggest heteroskedasticity and therefore we can no longer trust the standard errors in the lm1 model. The Chi-Square test statistic is equal to 106.31.
+
+
+### Calculate the VIF for each variable. [2 pts] 
+
+```{r}
+vif(lm1)
+```
+
+### Should we be concerned with multicollinearity. [2 pts] 
+
+We can interpret the VIFs for type and enrollment of 1.413965 as meaning that the percent by which the variance has increased due to multicollinearity is about 41%. Though there is no definite threshold for when to be concerned about multicollinearity, common suggestions identify VIF values of either 5 or 10 indicate reasons to be concerned about multicollinearity. Our value of 1.413965 is no where near these amounts, so we did not have to be concerned with multicollinearity. Though, since the value is above 1, this does suggest that there is low-moderate correlation.
+
+
+## Question 4
+
+### Recenter the variable enrollment at its mean. [2 pts] 
+
+```{r}
+cavax$enrollment_c <- cavax$enrollment - mean(cavax$enrollment)
+```
+
+### Create an interaction between type (type) and student enrollment (enrollment) recentered and rerun the model predicting exempt (exempt). [2 pts] 
+
+```{r}
+lm2 <- lm(data = cavax, formula = exempt ~ type * enrollment_c + enrollment_c + type)
+
+summary(lm2)
+```
+### Assume that type moderates the effect of enrollment in your interpretation of the interaction. 
+
+For the purposes of the question, we are assuming that the results show a significant interaction between district type and enrollment. So the effect of enrollment is not the same for public and private schools. Whether a school is private or not moderates the effect of enrollment on exempt.
+
+### (i) Interpret the results on each coefficient. 
+
+The coefficient for typePUBLIC is -0.651213. Because type is part of an interaction, we have to interpret it as simple main effect. A school type of public with an enrollment of 0 will have a predicted percent of students exempt from providing vaccination records of 0.651213 less compared to private schools with an enrollment of 0. The relationship is not significant (p = 0.28507).
+
+enrollment_c (centered) is part of an interaction, so we have to interpret it as simple main effect. The coefficient for enrollment_c shows the effect of enrollment_c only on private schools. The coefficient is -0.034017 which means that private schools will have a predicted percent of students exempt from providing vaccination records of 0.034017 less for each additional unit of enrollment. The relationship is significant (p<.01).
+
+The coefficient for typePUBLIC:enrollment_c is 0.004599. This value is the difference in effect of enrollment between public and private schools. For public schools, the effect of enrollment is 0.004599 dollars more for each additional unit of enrollment compared to private schools.
+
+Private schools have a predicted percent of students exempt from providing vaccination records that is 0.034017 less for each unit increase in enrollment, and public schools have a predicted percent of students exempt from providing vaccination records of 
+0.029418 (-0.034017 + 0.004599) less for each unit increase in enrollment.
+
+### (ii) Create a plot to visualize the interaction. [4 pts]
+
+```{r}
+ggplot(cavax) +
+  aes(x = enrollment_c, y = exempt, color = type) +
+  geom_point(color = "grey") +
+  geom_smooth(method = "lm")
+```
+
+## Question 5
+
+### Let’s log transform (using the natural log) the variable enrollment and call the new variable log_enroll. [2pts]  
+
+```{r}
+cavax$log_enroll <- log(cavax$enrollment)	
+```
+
+### Estimate a model predicting exempt (exempt) by district type (type) and log of enrollment (log_enrollment). [2pts] 
+
+```{r}
+lm3 <- lm(data = cavax, formula = exempt ~ log_enroll + type)
+
+summary(lm3)
+```
+
+### Interpret the coefficient on the log of enrollment. [2 pts] 
+
+DV = Intercept + B1 * log(IV) + Error
+
+This is a lin-log model, meaning that a one percent increase in the independent variable is associated with a (B1 / 100) unit increase in dependent variable, where B1 is the coefficient of log_enroll. So, B1 / 100 is the unit change in exempt, when enrollment increases by 1%, meaning that a one percent change in enrollment causes the predicted percent of students exempt from providing vaccination records to increase by 0.027338. We can also interpret the coefficient on the log of enrollment of -2.7338 as predicting that a one unit increase in the log of enrollment decreases the dependent exempt by variable by 2.7338. This variable is significant at the 0.001 level since the p-value is 2e-16.
+
+### Does it make more sense to use enrollment or the log of enrollment as the predictor variable? Why? [4 pts] 
+
+The enrollment variable represents a lin-lin model that predicted that for each additional unit increase in enrollment, the predicted percent of students exempt from providing vaccination records decreases by 0.029606. 
+
+The log of the enrollment variable predicts that a one percent change in enrollment causes the percent of students exempt from providing vaccination records to increase by 0.027338. 
+
+Taking the different interpretations of each of these models, my opinion is that it makes more sense to use the log of enrollment as the predictor variable. This is because I believe that using a percent increase in enrollment to estimate the unit increase in exempt seems more logical, given that a one unit increase in enrollment will likely have a more significant impact on schools with lower enrollment than schools with higher enrollment. 
+
+
+## Question 6
+
+### Create a binary variable to indicate high versus low exempt rates. For schools with exempt percentages equal to or greater than 33 percent, indicate them as “high”, for all other schools indicate them as “low”. [2 pts] 
+
+```{r}
+cavax <- cavax %>%
+  mutate(exempt_rank = ifelse(exempt >= 33.0, "high", "low"))
+```
+
+### Run a logistic regression predicting whether a school is high versus low, in other words, we want our model to predict schools falling into the high category. In your model use the predictors of school type (type) and enrollment (enrollment) (note: do not use log_enroll in this model). [2 pts] 
+
+```{r, warning=FALSE}
+cavax <- cavax %>%
+  mutate(dummy = ifelse(exempt_rank == "high", 1, 0))
+# high is 1, low is 0
+
+lm4 <- lm(formula = dummy ~ enrollment_c + type,
+          family = binomial(link = "logit"), data = cavax)
+
+summary(lm4)
+
+# This gives us the odds ratio of the coefficients
+exp(lm4$coef)
+```
+
+### Interpret the coefficients on type and enrollment in terms of both log odds and odds. [6 pts] 
+
+Log odds:
+
+enrollment_c: The logistic coefficients for the predictors correspond to our OLS regression coefficients, meaning that a one unit increase in enrollment decreases the log odds of being a high exempt school by 2.520e-04. This variable is significant at the 0.001 level since the p-value is 1.39e-10.
+
+typePUBLIC: When the school type is public, the log odds of being a high exempt school decreases by 9.050e-03. This variable is significant at the 0.05 level since the p-value is 0.0369.
+
+
+Odds:
+
+enrollment_c: The model coefficient for this variable is -2.520e-04 and the corresponding odds ratio is 0.9997480. This means that when the value of enrollment increases by one unit, the odds of being a high exempt school are 0.9997480 times greater. 
+
+typePUBLIC: The model coefficient for this variable is -9.050e-03 and the corresponding odds ratio is 0.9909906. This means that when a school is public, the odds of being a high exempt school are 0.9909906 times greater. 
+
+### What is the probability of being a high exempt school if the school is private and has 100 students enrolled? [2 pts] 
+
+0.4993197
+
+```{r}
+#P(event) = Exp(z)/(1 + Exp(z)).
+
+p = as.matrix(c(1,100,0))
+odds_p=exp(crossprod(p, coef(lm4)))
+
+odds_p/(1+odds_p)
+```
+
+# Part 2
+
+```{r, include=FALSE}
+concealed_carry <- read_csv("concealed_carry.csv")
+```
+
+## Question 7
+
+### 7a. Let’s begin by exploring the data. How many years are there in concealed_carry data? 
+
+There are 23 years in concealed_carry data.
+
+```{r}
+length(unique(concealed_carry$year))
+```
+### How many observations per state? [2 pts]
+
+There are 23 observations per state. This adds up since concealed_carry data has 1,173 total rows, and this results in 23 observations per the 51 states (DC is included).
+
+```{r}
+concealed_carry %>%
+  group_by(statename) %>%
+  count(nrow(statename))
+```
+
+
+### 7b. How many states had concealed carry laws (shall) in 1977 and how many had concealed carry laws in 1999? [4pts]
+
+The shall column equals 1 if state has concealed carry on that year and 0 if not, so I filter for when shall is equal to 1.
+
+In 1977, 4 states had concealed carry. 
+In 1999, 29 states had concealed carry. 
+```{r}
+
+concealed_carry %>%
+  group_by(statename) %>%
+  filter(shall == 1 & year %in% c(1977, 1999)) %>%
+  group_by(year) %>%
+  count(nrow(statename))
+
+```
+
+### 7c. Create a plot tracking the violent crime rate (vio) over time for states that have ever adopted conceal carry laws (shall) and those that have never adopted the law. [4 pts]
+
+```{r, message=FALSE}
+
+concealed_carry_1 <- concealed_carry  %>%
+  group_by(statename) %>%
+  mutate(ever = ifelse(sum(shall) != 0, "Conceal Carry", "Never"))
+
+concealed_carry_2 <- concealed_carry_1  %>%
+  group_by(ever, year) %>%
+  summarize(avg_vio = mean(vio), year)
+
+ggplot() +
+  geom_path(data = concealed_carry_1, aes(x=year, y=vio, group=statename, color=ever))
+
+ggplot() +
+  geom_path(data = concealed_carry_2, aes(x=year, y=avg_vio, group=ever, color=ever))
+
+```
+
+## Question 8 
+
+### Convert the violent crime rate (vio) into a logged variable (using the natural log), call it log_vio. [2 pts] 
+
+```{r}
+
+concealed_carry$log_vio <- log(concealed_carry$vio)	
+
+```
+
+### This will be our dependent variable. Run a pooled regression of the data (i.e., standard OLS model as if this was cross-sectional data) predicting the log of violent crimes (log_vio) as a function of the presence of concealed carry laws (shall) and a set of dummy variables for year. [2 pts] 
+
+```{r}
+
+concealed_carry_3 <- dummy_cols(concealed_carry, select_columns = "year")
+
+lm5 <- lm(data = concealed_carry_3, formula = log_vio ~ shall +
+            year_1977 + year_1978 + year_1979 + year_1980 + year_1981 +
+            year_1982 + year_1983 + year_1984 + year_1985 + year_1986 +
+            year_1987 + year_1988 + year_1989 + year_1990 + year_1991 +
+            year_1992 + year_1993 + year_1994 + year_1995 + year_1996 +
+            year_1997 + year_1998) # 1999 is base year
+
+summary(lm5)
+
+```
+
+### Interpret the effect of shall. [2 pts] 
+
+log(DV) = Intercept + B1 * IV + Error 
+%∆y = (100*B1)∆x
+
+This is a log-lin model, meaning that a shall value of 1 is associated with a (B1 * 100) percent increase in violent crimes. When the shall value is 1, violet crimes go down by 59.812%. This variable is significant at the .001 level with a p-value of  2e-16.
+
+### In general terms, what do the year dummy variables tell us about crime trends? [2 pts] 
+
+The coefficients of the dummy variables mean that when looking at a particular year, there is a predicted B * 100 percent impact on violent crimes for that year. The base is 1999, which will be represented by all year dummy variables being equal to 0.
+
+The dummy variables for year *generally* suggest that in the late 70s and 80s, the coefficients for each year were representing a decrease in percent of violent crimes, though at a high level the decrease was steadily declining in size. Then, in the 90s, the coefficients for each year began to represent an increase in percent of violent crimes. I interpreted the coefficients of the dummy variables to represent increasing percentages of violent crimes over time.  
+
+### In our current specificaiton of the model, is the effect of shall the same for all years? Why or why not? [2 pts] 
+
+Yes, the model assumes that the effect of the explanatory variable has remained constant for all years even though this may not actually be true. If we wanted to test if the effect of shall the is same for all years or not, we could add an interaction term. 
+
